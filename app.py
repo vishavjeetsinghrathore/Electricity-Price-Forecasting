@@ -1,25 +1,19 @@
-# app.py
-
 import streamlit as st
 import pandas as pd
 import joblib
 import os
-import subprocess
 
 st.set_page_config(page_title="Electricity Load Forecasting")
 
-# ===============================
-# Train model if not exists
-# ===============================
 MODEL_PATH = "best_model.pkl"
 
+# ===============================
+# Load model safely
+# ===============================
 if not os.path.exists(MODEL_PATH):
-    st.warning("Model not found. Training model... ⏳")
-    subprocess.run(["python", "train_model.py"])
+    st.error("❌ Model file not found. Please train the model locally.")
+    st.stop()
 
-# ===============================
-# Load trained model
-# ===============================
 model = joblib.load(MODEL_PATH)
 
 st.title("⚡ Electricity Load Forecasting")

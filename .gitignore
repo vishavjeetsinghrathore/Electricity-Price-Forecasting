@@ -9,9 +9,6 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
-# Model files (DO NOT PUSH)
-*.pkl
-*.joblib
 
 # OS files
 .DS_Store

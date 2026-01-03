@@ -5,9 +5,6 @@ import numpy as np
 import joblib
 
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score, GridSearchCV
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
@@ -27,34 +24,45 @@ df["month"] = df["Datetime"].dt.month
 df["dayofweek"] = df["Datetime"].dt.dayofweek
 
 # ===============================
-# 3. Sliding Window (Lag Features)
+# 3. Lag Features
 # ===============================
-def create_lag_features(data, lags=3):
-    for lag in range(1, lags + 1):
-        data[f"lag_{lag}"] = data["AEP_MW"].shift(lag)
-    return data
+for lag in [1, 2, 3]:
+    df[f"lag_{lag}"] = df["AEP_MW"].shift(lag)
 
-df = create_lag_features(df, lags=3)
 df.dropna(inplace=True)
 
 # ===============================
-# 4. Split Features & Target
+# 4. Features / Target
 # ===============================
 X = df.drop(["Datetime", "AEP_MW"], axis=1)
 y = df["AEP_MW"]
 
 # ===============================
-# 5. TimeSeries Cross Validation
+# 5. TimeSeries CV
 # ===============================
 tscv = TimeSeriesSplit(n_splits=5)
 
 # ===============================
-# 6. Models to Compare
+# 6. Models (DEPLOYMENT SAFE)
 # ===============================
 models = {
     "Linear Regression": LinearRegression(),
-    "Random Forest": RandomForestRegressor(random_state=42),
-    "Gradient Boosting": GradientBoostingRegressor(random_state=42)
+
+    "Random Forest": RandomForestRegressor(
+        n_estimators=50,          # ⬅ reduced
+        max_depth=12,             # ⬅ limits tree size
+        max_features="sqrt",
+        min_samples_leaf=5,
+        random_state=42,
+        n_jobs=-1
+    ),
+
+    "Gradient Boosting": GradientBoostingRegressor(
+        n_estimators=150,
+        learning_rate=0.05,
+        max_depth=3,
+        random_state=42
+    )
 }
 
 results = []
@@ -63,13 +71,8 @@ results = []
 # 7. Model Comparison
 # ===============================
 for name, model in models.items():
-    pipeline = Pipeline([
-        ("scaler", StandardScaler()),
-        ("model", model)
-    ])
-
-    cv_scores = cross_val_score(
-        pipeline,
+    scores = cross_val_score(
+        model,
         X,
         y,
         cv=tscv,
@@ -78,11 +81,11 @@ for name, model in models.items():
 
     results.append({
         "Model": name,
-        "CV_R2_Mean": np.mean(cv_scores)
+        "CV_R2_Mean": scores.mean()
     })
 
 results_df = pd.DataFrame(results)
-print("\nModel Comparison (TimeSeries CV):")
+print("\nModel Comparison (TimeSeries CV)")
 print(results_df)
 
 # ===============================
@@ -97,47 +100,33 @@ print(f"\nBest Model Selected: {best_model_name}")
 best_model = models[best_model_name]
 
 # ===============================
-# 9. Hyperparameter Tuning (ONLY BEST MODEL)
+# 9. Light Hyperparameter Tuning
 # ===============================
-param_grids = {
-    "Random Forest": {
-        "model__n_estimators": [100, 200],
-        "model__max_depth": [10, 20]
-    },
-    "Gradient Boosting": {
-        "model__n_estimators": [100, 200],
-        "model__learning_rate": [0.05, 0.1],
-        "model__max_depth": [3, 5]
+if best_model_name == "Random Forest":
+    param_grid = {
+        "n_estimators": [40, 60],
+        "max_depth": [10, 12]
     }
-}
 
-final_pipeline = Pipeline([
-    ("scaler", StandardScaler()),
-    ("model", best_model)
-])
-
-if best_model_name in param_grids:
-    print("\nApplying Hyperparameter Tuning...")
-
-    grid_search = GridSearchCV(
-        final_pipeline,
-        param_grids[best_model_name],
+    grid = GridSearchCV(
+        best_model,
+        param_grid,
         cv=tscv,
         scoring="r2",
         n_jobs=-1
     )
 
-    grid_search.fit(X, y)
-    final_model = grid_search.best_estimator_
+    grid.fit(X, y)
+    final_model = grid.best_estimator_
 
-    print("Best Parameters:", grid_search.best_params_)
-    print("Best CV R2:", grid_search.best_score_)
+    print("Best Params:", grid.best_params_)
+    print("Best CV R2:", grid.best_score_)
+
 else:
-    final_pipeline.fit(X, y)
-    final_model = final_pipeline
+    final_model = best_model.fit(X, y)
 
 # ===============================
-# 10. Save Final Model
+# 10. Save Model (COMPRESSED)
 # ===============================
-joblib.dump(final_model, "best_model.pkl")
-print("\nFinal model saved as best_model.pkl")
+joblib.dump(final_model, "best_model.pkl", compress=3)
+print("\nModel saved as best_model.pkl")
