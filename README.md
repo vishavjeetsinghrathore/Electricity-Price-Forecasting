@@ -32,3 +32,7 @@ Columns:
 ### 1️⃣ Install dependencies
 ```bash
 pip install -r requirements.txt
+
+### Project live on
+
+https://electricity-price-forecasting-gelgu9mjrdeylewmysefvd.streamlit.app/
